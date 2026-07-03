@@ -117,12 +117,16 @@ class TSFMEngine:
 
     def forecast_universe(self, price_panel: pd.DataFrame) -> list:
         """Run forecast_ticker across every column in a price panel."""
+        import traceback
+
         results = []
         for ticker in price_panel.columns:
             series = price_panel[ticker].dropna()
             try:
                 result = self.forecast_ticker(series, ticker)
             except Exception as e:
+                print(f"[tsfm_engine] ERROR forecasting {ticker}: {e}")
+                traceback.print_exc()
                 result = {"ticker": ticker, "status": "error", "error": str(e)}
             results.append(result)
         return results
