@@ -9,16 +9,15 @@ per the established suite-wide bug fix).
 import json
 import os
 import tempfile
-import datetime as dt
 
 from huggingface_hub import HfApi
 
-from config import OUTPUT_REPO
+from config import OUTPUT_REPO, HF_TOKEN
 from trainer import run_daily_forecast
 
 
 def push_to_hf(payload: dict) -> None:
-    api = HfApi(token=os.environ.get("HF_TOKEN"))
+    api = HfApi(token=HF_TOKEN or None)
 
     run_date = payload["run_date"]
     filename_dated = f"results/{run_date}.json"
