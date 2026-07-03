@@ -6,30 +6,36 @@ close-price series for zero-shot forecasting with Chronos.
 
 Follows the established suite-wide data-loading pattern:
   - hf_hub_download + pd.read_parquet (NOT HfFileSystem.open for reads)
-  - dropna restricted to REQUIRED_COLS (price + MACRO_COLS_CORE only)
-  - MACRO_COLS_EXTENDED (IG_SPREAD, HY_SPREAD, DGS*) NEVER included in dropna subset
+  - dropna restricted to price cols (COMBINED universe) + MACRO_COLS_CORE
+  - MACRO_COLS_EXTENDED (IG_SPREAD, HY_SPREAD) NEVER included in dropna subset
   - Prices are bare ticker columns; log returns = log(price_t / price_{t-1})
 """
 
 import pandas as pd
 import numpy as np
-from huggingface_hub import hf_hub_download
+from huggingface_hub import HfApi, hf_hub_download
 
-from config import (
-    MASTER_DATASET_REPO,
-    MASTER_DATASET_FILENAME,
-    FI_COMMODITIES,
-    EQUITY_SECTORS,
-    MACRO_COLS_CORE,
-    REQUIRED_COLS,
-)
+from config import DATA_REPO, UNIVERSES, MACRO_COLS_CORE
+
+
+def _find_parquet_filename(repo_id: str) -> str:
+    """Auto-detect the master parquet filename in the dataset repo."""
+    api = HfApi()
+    files = api.list_repo_files(repo_id=repo_id, repo_type="dataset")
+    parquet_files = [f for f in files if f.endswith(".parquet")]
+    if not parquet_files:
+        raise FileNotFoundError(f"No .parquet file found in dataset repo '{repo_id}'")
+    # Prefer a root-level file over one buried in a subfolder, if both exist.
+    parquet_files.sort(key=lambda f: (f.count("/"), f))
+    return parquet_files[0]
 
 
 def load_master_data() -> pd.DataFrame:
     """Download and load the shared master parquet dataset."""
+    filename = _find_parquet_filename(DATA_REPO)
     local_path = hf_hub_download(
-        repo_id=MASTER_DATASET_REPO,
-        filename=MASTER_DATASET_FILENAME,
+        repo_id=DATA_REPO,
+        filename=filename,
         repo_type="dataset",
     )
     df = pd.read_parquet(local_path)
@@ -38,10 +44,13 @@ def load_master_data() -> pd.DataFrame:
         df["date"] = pd.to_datetime(df["date"])
         df = df.sort_values("date").reset_index(drop=True)
 
-    # Critical fix: dropna restricted to price + core macro columns only.
-    # Options/ADV columns and MACRO_COLS_EXTENDED are NaN for most of history
-    # and must never be part of this subset, or dropna wipes all history.
-    dropna_subset = [c for c in REQUIRED_COLS if c in df.columns]
+    # Critical fix: dropna restricted to price (COMBINED tickers) + core macro
+    # columns only. Options/ADV columns and MACRO_COLS_EXTENDED are NaN for
+    # most of history and must never be part of this subset, or dropna wipes
+    # all history.
+    price_cols = [c for c in UNIVERSES["COMBINED"] if c in df.columns]
+    macro_cols = [c for c in MACRO_COLS_CORE if c in df.columns]
+    dropna_subset = price_cols + macro_cols
     df = df.dropna(subset=dropna_subset)
 
     return df
@@ -49,12 +58,9 @@ def load_master_data() -> pd.DataFrame:
 
 def get_universe_tickers(universe: str) -> list:
     """Return ticker list for a given universe. Never combine FI and EQUITY."""
-    if universe == "FI_COMMODITIES":
-        return FI_COMMODITIES
-    elif universe == "EQUITY_SECTORS":
-        return EQUITY_SECTORS
-    else:
+    if universe not in UNIVERSES:
         raise ValueError(f"Unknown universe: {universe}")
+    return UNIVERSES[universe]
 
 
 def get_price_series(df: pd.DataFrame, ticker: str) -> pd.Series:
