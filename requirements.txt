@@ -5,4 +5,4 @@ requests
 streamlit
 pandas_market_calendars
 torch
-chronos-forecasting
+chronos-forecasting==1.5.1
