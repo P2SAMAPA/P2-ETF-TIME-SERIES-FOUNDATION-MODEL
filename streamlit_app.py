@@ -4,16 +4,16 @@ streamlit_app.py — P2-ETF-TIME-SERIES-FOUNDATION-MODEL (TSFM)
 Dashboard for the Chronos zero-shot forecasting engine.
 
 IMPORTANT: All st.markdown() calls use plain strings built via string
-concatenation or .format(), NEVER f-strings. F-strings containing '**',
-'_varname_', or subscripts inside st.markdown() have caused NameErrors
-across the suite; this pattern avoids that class of bug entirely.
+concatenation, NEVER f-strings. F-strings containing '**', '_varname_', or
+subscripts inside st.markdown() have caused NameErrors elsewhere in the
+suite; this pattern avoids that class of bug entirely.
 """
 
 import streamlit as st
 import pandas as pd
 import requests
 
-from config import OUTPUT_REPO, MODEL_VARIANT
+from config import OUTPUT_REPO, MODEL_VARIANT, TOP_N
 
 st.set_page_config(page_title="TSFM — Chronos Zero-Shot Forecaster", layout="wide")
 
@@ -52,25 +52,34 @@ universe_tabs = st.tabs(["FI_COMMODITIES", "EQUITY_SECTORS"])
 for tab, universe in zip(universe_tabs, ["FI_COMMODITIES", "EQUITY_SECTORS"]):
     with tab:
         results = data.get("results", {}).get(universe, [])
+
+        picks = [r["ticker"] for r in results if r.get("top_pick")]
+        if picks:
+            st.markdown("**Top " + str(TOP_N) + " picks:** " + ", ".join(picks))
+
         rows = []
         for r in results:
             if r.get("status") != "ok":
                 rows.append({
+                    "Rank": "-",
                     "Ticker": r.get("ticker", "?"),
                     "Status": r.get("status", "unknown"),
                     "Signal": "-",
                     "Last Price": "-",
                     "Median Return": "-",
+                    "Composite Score": "-",
                     "Confidence": "-",
                 })
                 continue
 
             rows.append({
-                "Ticker": r["ticker"],
+                "Rank": r.get("rank", "-"),
+                "Ticker": ("⭐ " if r.get("top_pick") else "") + r["ticker"],
                 "Status": "ok",
                 "Signal": signal_color(r["signal"]) + " " + r["signal"],
                 "Last Price": round(r["last_price"], 2),
                 "Median Return": str(round(r["horizon_median_return"] * 100, 2)) + "%",
+                "Composite Score": round(r["composite_score"], 4),
                 "Confidence": round(r["confidence"], 2),
             })
 
@@ -96,6 +105,7 @@ for tab, universe in zip(universe_tabs, ["FI_COMMODITIES", "EQUITY_SECTORS"]):
             summary_line = (
                 selected + " — last price " + str(round(detail["last_price"], 2))
                 + ", signal " + detail["signal"]
+                + ", composite score " + str(round(detail["composite_score"], 4))
                 + ", confidence " + str(round(detail["confidence"], 2))
             )
             st.markdown(summary_line)
