@@ -59,8 +59,11 @@ class TSFMEngine:
 
         context = torch.tensor(series.values, dtype=torch.float32)
 
+        # Passed positionally (not context=) — some chronos-forecasting
+        # versions renamed/repositioned this first parameter, and calling
+        # positionally works across versions.
         forecast = self.pipeline.predict(
-            context=context,
+            context,
             prediction_length=PRED_HORIZON,
             num_samples=NUM_SAMPLES,
         )
