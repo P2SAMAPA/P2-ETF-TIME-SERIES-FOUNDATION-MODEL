@@ -2,8 +2,8 @@ name: TSFM Daily Forecast
 
 on:
   schedule:
-    # 21:30 UTC, Mon-Fri (after US market close)
-    - cron: '30 01 * * 1-6'
+    # 20:30 UTC, Mon-Fri (after US market close)
+    - cron: '30 00 * * 1-6'
   workflow_dispatch: {}
 
 jobs:
